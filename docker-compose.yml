@@ -1,0 +1,61 @@
+x-db-credentials: &db-credentials
+  POSTGRES_USER: &db-user ${DB_USER:-listmonk}
+  POSTGRES_PASSWORD: &db-password ${DB_PASSWORD:-listmonk}
+  POSTGRES_DB: &db-name ${DB_NAME:-listmonk}
+
+services:
+  app:
+    image: listmonk/listmonk:latest
+    container_name: listmonk_app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-9000}:9000"
+    networks:
+      - listmonk
+    hostname: ${APP_HOSTNAME:-listmonk.example.com}
+    depends_on:
+      - db
+    command: [sh, -c, "./listmonk --install --idempotent --yes --config '' && ./listmonk --upgrade --yes --config '' && ./listmonk --config ''"]
+    environment:
+      LISTMONK_app__address: 0.0.0.0:9000
+      LISTMONK_db__user: *db-user
+      LISTMONK_db__password: *db-password
+      LISTMONK_db__database: *db-name
+      LISTMONK_db__host: listmonk_db
+      LISTMONK_db__port: ${DB_PORT:-5432}
+      LISTMONK_db__ssl_mode: ${DB_SSL_MODE:-disable}
+      LISTMONK_db__max_open: ${DB_MAX_OPEN:-25}
+      LISTMONK_db__max_idle: ${DB_MAX_IDLE:-25}
+      LISTMONK_db__max_lifetime: ${DB_MAX_LIFETIME:-300s}
+      TZ: ${TIMEZONE:-Etc/UTC}
+      LISTMONK_ADMIN_USER: ${LISTMONK_ADMIN_USER:-}
+      LISTMONK_ADMIN_PASSWORD: ${LISTMONK_ADMIN_PASSWORD:-}
+    volumes:
+      - ${UPLOAD_PATH:-./uploads}:/listmonk/uploads:rw
+
+  db:
+    image: postgres:17-alpine
+    container_name: listmonk_db
+    restart: unless-stopped
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    networks:
+      - listmonk
+    environment:
+      <<: *db-credentials
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-listmonk}"]
+      interval: ${HEALTH_CHECK_INTERVAL:-10s}
+      timeout: ${HEALTH_CHECK_TIMEOUT:-5s}
+      retries: ${HEALTH_CHECK_RETRIES:-6}
+    volumes:
+      - type: volume
+        source: listmonk-data
+        target: /var/lib/postgresql/data
+
+networks:
+  listmonk:
+
+volumes:
+  listmonk-data:
+
